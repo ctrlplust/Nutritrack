@@ -65,6 +65,38 @@
 | ESP32 → Backend | `HTTP` |
 | ESP32 → Polling `GET /active` | `HTTP` cada 3s |
 
+### 🌐 Modelo de Conectividad
+
+```
+      ┌─────────────────── RED LOCAL (192.168.1.x) ───────────────────┐
+      │                                                               │
+      │  ┌──────────────┐                   ┌──────────────────────┐  │
+      │  │   ESP32       │  HTTP (puerto    │  PC Windows (WSL2)   │  │
+      │  │   Balanza     │◄────3000────────►│  Backend Express     │  │
+      │  │   (Cliente)   │  GET /active     │  192.168.1.94:3000   │  │
+      │  │               │  POST /reading   │                      │  │
+      │  └──────────────┘                   └──────────────────────┘  │
+      │                                                               │
+      │                      ┌──────────────┐                        │
+      │  ┌──────────────┐    │  Router/WiFi  │    ┌──────────────┐   │
+      │  │  iPhone (App) │───►  Asigna IPs   │◄───│  Túnel       │   │
+      │  │  Expo Go      │    │  192.168.1.x │    │  Pinggy.io   │   │
+      │  └──────────────┘    └──────────────┘    │  HTTPS       │   │
+      │                                                    │      │
+      └────────────────────────────────────────────────────┘      │
+                                                          ┌──────┴───┐
+                                                          │ Internet │
+                                                          └──────────┘
+```
+
+**¿Por qué el ESP32 usa HTTP y no HTTPS?**
+- El ESP32 y tu PC están en la **misma red local** (`192.168.1.x`). El tráfico viaja directo a través del router, sin salir a internet. No necesita cifrado porque nunca abandona la LAN.
+- `192.168.1.94` es la IP que el router le asignó a tu computador con Windows. Al configurar esa IP en el ESP32, este sabe que debe enviar los datos "puertas adentro" de tu red local.
+
+**¿Por qué la App iOS necesita un túnel?**
+- Apple **exige HTTPS** para cualquier conexión HTTP desde apps sobre redes móviles (celular). El túnel Pinggy.io envuelve la conexión en HTTPS y la reenvía a tu backend local.
+- Mientras el ESP32 se comunica por **HTTP directo** (red local), el iPhone lo hace por **HTTPS** vía túnel — ambos llegan al mismo backend en `localhost:3000`.
+
 ---
 
 ## 🛠 Tecnologías
