@@ -91,7 +91,13 @@
 
 **¿Por qué el ESP32 usa HTTP y no HTTPS?**
 - El ESP32 y tu PC están en la **misma red local** (`192.168.1.x`). El tráfico viaja directo a través del router, sin salir a internet. No necesita cifrado porque nunca abandona la LAN.
-- `192.168.1.94` es la IP que el router le asignó a tu computador con Windows. Al configurar esa IP en el ESP32, este sabe que debe enviar los datos "puertas adentro" de tu red local.
+- `192.168.1.94` es un **ejemplo**. Cada red local asigna IPs distintas. Para conocer tu propia IP:
+
+- **Windows**: Abrí `CMD` y ejecutá `ipconfig`. Buscá la línea `Dirección IPv4` en tu adaptador Wi-Fi (ej: `192.168.0.15`, `10.0.0.5`, etc.).
+- **WSL**: Ejecutá `ip addr show eth0 | grep inet`.
+- **Linux**: Ejecutá `hostname -I`.
+
+Esa IP es la que va en el `esp32ServerUrl` de la app y en el `SERVER_BASE` del ESP32.
 
 **¿Por qué la App iOS necesita un túnel?**
 - Apple **exige HTTPS** para cualquier conexión HTTP desde apps sobre redes móviles (celular). El túnel Pinggy.io envuelve la conexión en HTTPS y la reenvía a tu backend local.
