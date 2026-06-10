@@ -7,11 +7,11 @@
 // ─────────────────────────────────────────
 //  ⚙️  CONFIGURACIÓN RED LOCAL
 // ─────────────────────────────────────────
-#define WIFI_SSID        "Pochita"
-#define WIFI_PASSWORD    "4c3opij0km"
+#define WIFI_SSID        "NOMBRE-WIFI"
+#define WIFI_PASSWORD    "CONTRA-WIFI"
 
 // ¡Apuntamos directamente a tu PC en la red local!
-#define SERVER_BASE      "http://192.168.1.94:3000/api/nutritrack"
+#define SERVER_BASE      "http://192.168.1.XX:3000/api/nutritrack"
 #define SERVER_URL       SERVER_BASE "/reading"
 #define POLL_URL         SERVER_BASE "/active"
 
