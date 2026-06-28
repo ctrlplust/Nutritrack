@@ -17,6 +17,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MacroBar } from "@/components/MacroBar";
 import { useNutri } from "@/context/NutriContext";
+import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 
 type ESP32Status = "idle" | "checking" | "online" | "offline";
@@ -24,6 +25,7 @@ type ESP32Status = "idle" | "checking" | "online" | "offline";
 export default function DashboardScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const {
     currentProfile, todayTotals, consumptions, profiles,
     switchProfile, inventory, simulateReading, esp32ServerUrl,
@@ -86,7 +88,7 @@ export default function DashboardScreen() {
     if (item && newWeight >= item.currentWeightG) {
       Alert.alert(
         "Sin consumo detectado",
-        `El nuevo peso (${newWeight}g) debe ser menor al actual (${item.currentWeightG}g) para registrar un consumo.`
+        `El nuevo peso (${newWeight}g) debe ser menor al actual (${item.currentWeightG.toFixed(1)}g) para registrar un consumo.`
       );
       return;
     }
@@ -99,7 +101,7 @@ export default function DashboardScreen() {
 
   const selectedItem = inventory.find((i) => i.id === selectedItemId);
   const deltaPreview = selectedItem && newWeightInput
-    ? selectedItem.currentWeightG - parseFloat(newWeightInput || "0")
+    ? Math.round((selectedItem.currentWeightG - parseFloat(newWeightInput || "0")) * 10) / 10
     : null;
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
@@ -113,6 +115,8 @@ export default function DashboardScreen() {
         <View>
           <Text style={styles.headerTitle}>NutriTrack</Text>
           <Text style={styles.headerSub}>
+            {user && `${user.username}${user.role === "guest" ? " (Invitado)" : user.role === "admin" ? " (Admin)" : ""}`}
+            {user ? " · " : ""}
             {new Date().toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}
           </Text>
         </View>
@@ -345,7 +349,7 @@ export default function DashboardScreen() {
                   styles.formulaResult,
                   { color: deltaPreview > 0 ? colors.protein : colors.mutedForeground }
                 ]}>
-                  = {selectedItem.currentWeightG}g − {newWeightInput}g = <Text style={{ fontFamily: "Inter_700Bold" }}>{deltaPreview}g consumidos</Text>
+                  = {selectedItem.currentWeightG.toFixed(1)}g − {newWeightInput}g = <Text style={{ fontFamily: "Inter_700Bold" }}>{deltaPreview!.toFixed(1)}g consumidos</Text>
                 </Text>
               )}
             </View>
@@ -371,7 +375,7 @@ export default function DashboardScreen() {
                     </Text>
                   </View>
                   <Text style={[styles.inventoryOptionWeight, { color: colors.primary }]}>
-                    {item.currentWeightG}g actual
+                    {item.currentWeightG.toFixed(1)}g actual
                   </Text>
                 </Pressable>
               ))}
@@ -387,7 +391,7 @@ export default function DashboardScreen() {
                     styles.weightInput,
                     { borderColor: colors.border, backgroundColor: colors.input, color: colors.foreground },
                   ]}
-                  placeholder={`Menor a ${selectedItem.currentWeightG}g`}
+                  placeholder={`Menor a ${selectedItem.currentWeightG.toFixed(1)}g`}
                   placeholderTextColor={colors.mutedForeground}
                   keyboardType="numeric"
                   value={newWeightInput}

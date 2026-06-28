@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
@@ -14,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAuth } from "@/context/AuthContext";
 import { type ActivityLevel, type Profile, type Sex, calcTDEE, useNutri } from "@/context/NutriContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -110,11 +112,18 @@ export default function ProfileScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { profiles, currentProfile, switchProfile, addProfile, updateProfile, consumptions, todayTotals } = useNutri();
+  const { user, logout, register: registerUser } = useAuth();
   const [addModal, setAddModal] = useState(false);
   const [editModal, setEditModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Profile | null>(null);
   const [form, setForm] = useState<ProfileFormData>(emptyForm());
   const [endpointExpanded, setEndpointExpanded] = useState(false);
+  const [adminModal, setAdminModal] = useState(false);
+  const [newUsername, setNewUsername] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+
+  const isAdmin = user?.role === "admin";
+  const isGuest = user?.role === "guest";
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
@@ -133,6 +142,37 @@ export default function ProfileScreen() {
     updateProfile({ ...formToProfile(form), id: editTarget.id });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setEditModal(false);
+  }
+
+  async function handleCreateUser() {
+    if (!newUsername.trim() || !newPassword.trim()) {
+      Alert.alert("Campos requeridos", "Ingresa usuario y contraseña");
+      return;
+    }
+    if (newPassword.length < 4) {
+      Alert.alert("Contraseña muy corta", "Debe tener al menos 4 caracteres");
+      return;
+    }
+    try {
+      await registerUser(newUsername.trim(), newPassword);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("Usuario creado", `El usuario "${newUsername}" fue creado exitosamente`);
+      setNewUsername("");
+      setNewPassword("");
+      setAdminModal(false);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Error al crear usuario";
+      Alert.alert("Error", message);
+    }
+  }
+
+  function handleLogout() {
+    Alert.alert("Cerrar sesión", "¿Estás seguro?", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Cerrar sesión", style: "destructive", onPress: () => {
+        logout();
+      }},
+    ]);
   }
 
   const totalConsumed = consumptions.filter((c) => c.profileId === currentProfile?.id).length;
@@ -156,55 +196,94 @@ export default function ProfileScreen() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topPad + 12, backgroundColor: colors.primary }]}>
-        <Text style={styles.headerTitle}>Perfil</Text>
-        <Pressable style={[styles.addBtn, { backgroundColor: "rgba(255,255,255,0.2)" }]} onPress={openAdd}>
-          <Feather name="user-plus" size={18} color="#fff" />
-        </Pressable>
+        <View>
+          <Text style={styles.headerTitle}>Perfil</Text>
+          {user && (
+            <Text style={styles.headerSub}>
+              {user.username} {isGuest ? "(Invitado)" : isAdmin ? "(Admin)" : ""}
+            </Text>
+          )}
+        </View>
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          {isAdmin && (
+            <Pressable style={[styles.addBtn, { backgroundColor: "rgba(255,255,255,0.2)" }]} onPress={() => setAdminModal(true)}>
+              <Feather name="shield" size={18} color="#fff" />
+            </Pressable>
+          )}
+          <Pressable style={[styles.addBtn, { backgroundColor: "rgba(255,255,255,0.2)" }]} onPress={openAdd}>
+            <Feather name="user-plus" size={18} color="#fff" />
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + (Platform.OS === "web" ? 34 : 0) + 100 }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Current Profile Card */}
-        {currentProfile && (
-          <View style={[styles.currentCard, { backgroundColor: colors.primary }]}>
+        {/* User Info Card */}
+        {user && (
+          <View style={[styles.currentCard, { backgroundColor: isGuest ? colors.muted : colors.primary }]}>
             <View style={styles.currentAvatarRow}>
               <View style={[styles.avatar, { backgroundColor: "rgba(255,255,255,0.25)" }]}>
-                <Text style={styles.avatarText}>{currentProfile.name[0]}</Text>
-              </View>
-              <View style={styles.currentInfo}>
-                <Text style={styles.currentName}>{currentProfile.name}</Text>
-                <Text style={styles.currentSub}>
-                  {currentProfile.heightCm && currentProfile.weightKg
-                    ? `${currentProfile.heightCm}cm · ${currentProfile.weightKg}kg · ${currentProfile.age ?? "—"} años`
-                    : "Perfil activo · NutriTrack"}
+                <Text style={styles.avatarText}>
+                  {user.role === "guest" ? "?" : user.username[0].toUpperCase()}
                 </Text>
               </View>
+              <View style={styles.currentInfo}>
+                <Text style={styles.currentName}>
+                  {user.role === "guest" ? "Invitado" : user.username}
+                </Text>
+                <Text style={styles.currentSub}>
+                  {isGuest ? "Sesión temporal — los datos no se guardan" : "Sesión iniciada"}
+                </Text>
+              </View>
+              <Pressable onPress={handleLogout}>
+                <Feather name="log-out" size={18} color="rgba(255,255,255,0.8)" />
+              </Pressable>
+            </View>
+            {isGuest && (
+              <View style={[styles.guestBadge, { backgroundColor: "rgba(255,255,255,0.2)" }]}>
+                <Feather name="info" size={14} color="#fff" />
+                <Text style={styles.guestBadgeText}>
+                  Modo invitado: explora la app sin guardar datos. Al cerrar sesión se borrará todo.
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Current Profile Card */}
+        {currentProfile && (
+          <View style={[styles.section, { backgroundColor: colors.card }]}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleRow}>
+                <Feather name="user" size={16} color={colors.primary} />
+                <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Perfil nutricional</Text>
+              </View>
               <Pressable onPress={() => openEdit(currentProfile)}>
-                <Feather name="edit-2" size={18} color="rgba(255,255,255,0.8)" />
+                <Text style={[styles.editLink, { color: colors.primary }]}>Editar</Text>
               </Pressable>
             </View>
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
-                <Text style={styles.statNum}>{Math.round(todayTotals.calories)}</Text>
-                <Text style={styles.statLabel}>kcal hoy</Text>
+                <Text style={[styles.statNumMuted, { color: colors.foreground }]}>{Math.round(todayTotals.calories)}</Text>
+                <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>kcal hoy</Text>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statItem}>
-                <Text style={styles.statNum}>{totalConsumed}</Text>
-                <Text style={styles.statLabel}>registros</Text>
+                <Text style={[styles.statNumMuted, { color: colors.foreground }]}>{totalConsumed}</Text>
+                <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>registros</Text>
               </View>
               <View style={styles.statDivider} />
               {bmi ? (
                 <View style={styles.statItem}>
-                  <Text style={[styles.statNum, { color: bmiColor ?? "#fff" }]}>{bmi}</Text>
-                  <Text style={styles.statLabel}>IMC ({bmiLabel})</Text>
+                  <Text style={[styles.statNumMuted, { color: bmiColor ?? colors.foreground }]}>{bmi}</Text>
+                  <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>IMC ({bmiLabel})</Text>
                 </View>
               ) : (
                 <View style={styles.statItem}>
-                  <Text style={styles.statNum}>{Math.round(totalCaloriesAll / 1000 * 10) / 10}k</Text>
-                  <Text style={styles.statLabel}>kcal totales</Text>
+                  <Text style={[styles.statNumMuted, { color: colors.foreground }]}>{Math.round(totalCaloriesAll / 1000 * 10) / 10}k</Text>
+                  <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>kcal totales</Text>
                 </View>
               )}
             </View>
@@ -364,6 +443,18 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Logout */}
+        <Pressable
+          style={({ pressed }) => [
+            styles.logoutBtn,
+            { borderColor: colors.destructive, opacity: pressed ? 0.7 : 1 },
+          ]}
+          onPress={handleLogout}
+        >
+          <Feather name="log-out" size={18} color={colors.destructive} />
+          <Text style={[styles.logoutBtnText, { color: colors.destructive }]}>Cerrar sesión</Text>
+        </Pressable>
+
         {/* Project info */}
         <View style={[styles.projectCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.projectTitle, { color: colors.primary }]}>NutriTrack v1.0</Text>
@@ -421,6 +512,50 @@ export default function ProfileScreen() {
           </KeyboardAvoidingView>
         </Pressable>
       </Modal>
+
+      {/* Admin Panel Modal */}
+      {isAdmin && (
+        <Modal visible={adminModal} transparent animationType="slide">
+          <Pressable style={styles.modalOverlay} onPress={() => setAdminModal(false)}>
+            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ width: "100%" }}>
+              <Pressable style={[styles.modalCard, { backgroundColor: colors.card }]} onPress={() => {}}>
+                <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+                <View style={[styles.adminHeader, { backgroundColor: colors.secondary }]}>
+                  <Feather name="shield" size={20} color={colors.primary} />
+                  <Text style={[styles.adminHeaderText, { color: colors.primary }]}>Panel de Administración</Text>
+                </View>
+                <Text style={[styles.adminSubtitle, { color: colors.mutedForeground }]}>Crear nuevo usuario</Text>
+                <TextInput
+                  style={[styles.input, { borderColor: colors.border, backgroundColor: colors.input, color: colors.foreground }]}
+                  placeholder="Nombre de usuario"
+                  placeholderTextColor={colors.mutedForeground}
+                  autoCapitalize="none"
+                  value={newUsername}
+                  onChangeText={setNewUsername}
+                />
+                <TextInput
+                  style={[styles.input, { borderColor: colors.border, backgroundColor: colors.input, color: colors.foreground }]}
+                  placeholder="Contraseña (mín. 4 caracteres)"
+                  placeholderTextColor={colors.mutedForeground}
+                  secureTextEntry
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                />
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.confirmBtn,
+                    { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 },
+                  ]}
+                  onPress={handleCreateUser}
+                >
+                  <Feather name="user-plus" size={16} color="#fff" />
+                  <Text style={[styles.confirmBtnText, { color: "#fff" }]}>Crear usuario</Text>
+                </Pressable>
+              </Pressable>
+            </KeyboardAvoidingView>
+          </Pressable>
+        </Modal>
+      )}
     </View>
   );
 }

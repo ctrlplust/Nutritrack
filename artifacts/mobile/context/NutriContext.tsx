@@ -7,6 +7,8 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { ALL_CHILEAN_FOODS } from "../data/foods_chile";
+import { useAuth } from "./AuthContext";
 
 export type Sex = "male" | "female";
 export type ActivityLevel = "sedentary" | "light" | "moderate" | "active" | "veryActive";
@@ -113,17 +115,42 @@ interface NutriContextType {
   addConsumptionManual: (product: Product, weightG: number) => void;
   deleteConsumption: (id: string) => void;
   syncEsp32: () => Promise<void>;
+  sendWeighCommand: (action: "weigh" | "tare" | "stop") => Promise<void>;
+  searchFatSecretFoods: (query: string, maxResults?: number) => Promise<FatSecretSearchResult>;
+  importFromFatSecret: (foodId: string, foodName: string, brand?: string, caloriesPer100g?: number, proteinPer100g?: number, carbsPer100g?: number, fatPer100g?: number) => Promise<Product>;
+  scaleToast: ScaleToast | null;
+  clearScaleToast: () => void;
+}
+
+export interface ScaleToast {
+  productName: string;
+  weightConsumedG: number;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  weightBefore?: number;
+  weightAfter?: number;
+}
+
+export interface FatSecretSearchResult {
+  foods: Array<{
+    id: string;
+    name: string;
+    brand?: string;
+    description?: string;
+    caloriesPer100g: number;
+    proteinPer100g: number;
+    carbsPer100g: number;
+    fatPer100g: number;
+  }>;
 }
 
 const NutriContext = createContext<NutriContextType | null>(null);
 
-const KEYS = {
-  profiles: "nutritrack_profiles",
-  currentProfileId: "nutritrack_current_profile",
-  products: "nutritrack_products",
-  inventory: "nutritrack_inventory",
-  consumptions: "nutritrack_consumptions",
-};
+function storageKey(userId: string, base: string): string {
+  return `nutritrack_${userId}_${base}`;
+}
 
 const ACTIVITY_MULTIPLIERS: Record<ActivityLevel, number> = {
   sedentary: 1.2,
@@ -146,18 +173,7 @@ export function calcTDEE(p: Partial<Profile>): TDEE | null {
   return { bmr: Math.round(bmr), tdee, calories: tdee, proteinGoal: protein, carbsGoal: carbs, fatGoal: fat };
 }
 
-const SAMPLE_PRODUCTS: Product[] = [
-  { id: "p1", barcode: "7802800053001", name: "Pechuga de Pollo", brand: "Super Pollo", caloriesPer100g: 165, proteinPer100g: 31, carbsPer100g: 0, fatPer100g: 3.6 },
-  { id: "p2", barcode: "7802800012345", name: "Arroz Integral", brand: "Carozzi", caloriesPer100g: 362, proteinPer100g: 7.5, carbsPer100g: 76, fatPer100g: 2.7 },
-  { id: "p3", barcode: "7802800099001", name: "Avena Tradicional", brand: "Quaker", caloriesPer100g: 389, proteinPer100g: 17, carbsPer100g: 66, fatPer100g: 7 },
-  { id: "p4", barcode: "7802800055555", name: "Aceite de Oliva", brand: "Borges", caloriesPer100g: 884, proteinPer100g: 0, carbsPer100g: 0, fatPer100g: 100 },
-  { id: "p5", barcode: "7802800011111", name: "Huevo Entero", brand: "Sopraval", caloriesPer100g: 155, proteinPer100g: 13, carbsPer100g: 1.1, fatPer100g: 11 },
-  { id: "p6", barcode: "7802800022222", name: "Whey Protein Chocolate", brand: "Optimum Nutrition", caloriesPer100g: 380, proteinPer100g: 75, carbsPer100g: 8, fatPer100g: 5 },
-  { id: "p7", barcode: "7802800033333", name: "Salmón Fresco", brand: "AquaChile", caloriesPer100g: 208, proteinPer100g: 20, carbsPer100g: 0, fatPer100g: 13 },
-  { id: "p8", barcode: "7802800044444", name: "Yogurt Griego Natural", brand: "Nestlé", caloriesPer100g: 97, proteinPer100g: 9, carbsPer100g: 4, fatPer100g: 5 },
-  { id: "p9", barcode: "7802800066666", name: "Quinoa Cocida", brand: "Granos del Sol", caloriesPer100g: 120, proteinPer100g: 4.4, carbsPer100g: 21.3, fatPer100g: 1.9 },
-  { id: "p10", barcode: "7802800077777", name: "Almendras", brand: "Planters", caloriesPer100g: 579, proteinPer100g: 21, carbsPer100g: 22, fatPer100g: 50 },
-];
+const SAMPLE_PRODUCTS: Product[] = ALL_CHILEAN_FOODS;
 
 const SAMPLE_PROFILES: Profile[] = [
   {
@@ -185,6 +201,8 @@ function calcMacros(product: Product, weightG: number) {
   };
 }
 
+const round1 = (n: number) => Math.round(n * 10) / 10;
+
 function uid() {
   return Date.now().toString() + Math.random().toString(36).substr(2, 9);
 }
@@ -195,7 +213,7 @@ function isSameDay(a: string, b: string) {
 
 // Derive per-100g values from a server consumption record
 function serverConsumptionToProduct(sc: ServerConsumption): Product {
-  const w = sc.weightConsumedG > 0 ? sc.weightConsumedG : 100;
+  const w = sc.weightConsumedG > 0 ? round1(sc.weightConsumedG) : 100;
   return {
     id: "esp32-" + sc.productId,
     name: sc.productName,
@@ -207,6 +225,7 @@ function serverConsumptionToProduct(sc: ServerConsumption): Product {
 }
 
 export function NutriProvider({ children }: { children: React.ReactNode }) {
+  const { token, user } = useAuth();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [currentProfileId, setCurrentProfileId] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -215,6 +234,9 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [esp32Connected, setEsp32Connected] = useState(false);
   const [activeProductOnScale, setActiveProductOnScaleState] = useState<InventoryItem | null>(null);
+  const [scaleToast, setScaleToast] = useState<ScaleToast | null>(null);
+
+  function clearScaleToast() { setScaleToast(null); }
 
   // Use a ref so the polling closure never goes stale
   const lastSyncRef = useRef<string>(new Date(Date.now() - 60 * 1000).toISOString());
@@ -228,40 +250,83 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
   // Track whether we've synced products to the server in this session
   const productsSyncedRef = useRef(false);
 
-  const esp32ServerUrl = "https://vbyfr-201-188-83-149.run.pinggy-free.link";
+  const tokenRef = useRef<string | null>(null);
+  tokenRef.current = token;
+
+  const userIdRef = useRef<string>("anon");
+  userIdRef.current = user?.id || "anon";
+
+  const esp32ServerUrl = process.env.EXPO_PUBLIC_PINGGY_URL || "http://192.168.1.94:3000";
+
+  function K(base: string): string {
+    return storageKey(userIdRef.current, base);
+  }
+
+  function authHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (tokenRef.current) {
+      headers["Authorization"] = `Bearer ${tokenRef.current}`;
+    }
+    return headers;
+  }
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [user?.id]);
 
   async function loadData() {
     try {
       const [pStr, cpStr, prodStr, invStr, conStr] = await Promise.all([
-        AsyncStorage.getItem(KEYS.profiles),
-        AsyncStorage.getItem(KEYS.currentProfileId),
-        AsyncStorage.getItem(KEYS.products),
-        AsyncStorage.getItem(KEYS.inventory),
-        AsyncStorage.getItem(KEYS.consumptions),
+        AsyncStorage.getItem(K("profiles")),
+        AsyncStorage.getItem(K("currentProfileId")),
+        AsyncStorage.getItem(K("products")),
+        AsyncStorage.getItem(K("inventory")),
+        AsyncStorage.getItem(K("consumptions")),
       ]);
       const loadedProfiles: Profile[] = pStr ? JSON.parse(pStr) : SAMPLE_PROFILES;
-      const loadedProducts: Product[] = prodStr ? JSON.parse(prodStr) : SAMPLE_PRODUCTS;
+      let loadedProducts: Product[] = prodStr ? JSON.parse(prodStr) : SAMPLE_PRODUCTS;
+      if (loadedProducts.length < ALL_CHILEAN_FOODS.length) {
+        const existingIds = new Set(loadedProducts.map(p => p.id));
+        const existingBarcodes = new Set(loadedProducts.map(p => p.barcode).filter(Boolean));
+        const missing = ALL_CHILEAN_FOODS.filter(
+          p => !existingIds.has(p.id) && !existingBarcodes.has(p.barcode),
+        );
+        if (missing.length > 0) {
+          loadedProducts = [...loadedProducts, ...missing];
+          await AsyncStorage.setItem(K("products"), JSON.stringify(loadedProducts));
+        }
+      }
       const loadedInventory: InventoryItem[] = invStr ? JSON.parse(invStr) : [];
       const loadedConsumptions: Consumption[] = conStr ? JSON.parse(conStr) : [];
       const loadedCurrentId: string | null = cpStr || loadedProfiles[0]?.id || null;
 
-      if (!pStr) await AsyncStorage.setItem(KEYS.profiles, JSON.stringify(loadedProfiles));
-      if (!prodStr) await AsyncStorage.setItem(KEYS.products, JSON.stringify(loadedProducts));
-      if (!cpStr && loadedCurrentId) await AsyncStorage.setItem(KEYS.currentProfileId, loadedCurrentId);
+      if (!pStr) await AsyncStorage.setItem(K("profiles"), JSON.stringify(loadedProfiles));
+      if (!prodStr) await AsyncStorage.setItem(K("products"), JSON.stringify(loadedProducts));
+      if (!cpStr && loadedCurrentId) await AsyncStorage.setItem(K("currentProfileId"), loadedCurrentId);
 
       setProfiles(loadedProfiles);
       setCurrentProfileId(loadedCurrentId);
       setProducts(loadedProducts);
-      setInventory(loadedInventory);
-      setConsumptions(loadedConsumptions);
+      setInventory(loadedInventory.map(i => ({
+        ...i,
+        currentWeightG: round1(i.currentWeightG),
+        initialWeightG: round1(i.initialWeightG),
+      })));
+      setConsumptions(loadedConsumptions.map(c => ({
+        ...c,
+        weightConsumedG: round1(c.weightConsumedG),
+      })));
     } catch (_e) {
     } finally {
       setLoading(false);
     }
+  }
+
+  function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
+    return fetch(url, {
+      ...options,
+      headers: { ...authHeaders(), ...(options.headers as Record<string, string> || {}) },
+    });
   }
 
   // ─── Sync local products → server (so ESP32 hardcoded productName gets macros) ──
@@ -273,9 +338,8 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
         localProducts.map((p) => {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 15000);
-          return fetch(`${esp32ServerUrl}/api/nutritrack/products`, {
+          return apiFetch(`${esp32ServerUrl}/api/nutritrack/products`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               barcode: p.barcode ?? "local-" + p.id,
               name: p.name,
@@ -293,6 +357,23 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
     } catch (_e) {}
   }, [esp32ServerUrl]);
 
+// ─── ESP32 Status check (separado del sync de consumos) ──────────────────
+  const checkEsp32Status = useCallback(async () => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const res = await apiFetch(`${esp32ServerUrl}/api/nutritrack/status`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (!res.ok) { setEsp32Connected(false); return; }
+      const data = await res.json();
+      setEsp32Connected(data.esp32Connected === true);
+    } catch {
+      setEsp32Connected(false);
+    }
+  }, [esp32ServerUrl]);
+
 // ─── ESP32 Polling ─────────────────────────────────────────────────────────
   const syncEsp32 = useCallback(async () => {
     const profileId = currentProfileIdRef.current;
@@ -301,25 +382,20 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
     const timeoutId = setTimeout(() => controller.abort(), 15000);
     try {
       const since = encodeURIComponent(lastSyncRef.current);
-      console.log("🚨 ATENCIÓN: Intentando conectar a:", esp32ServerUrl);
-      console.log("Ruta completa:", `${esp32ServerUrl}/api/nutritrack/consumptions?since=${since}`);
-      const res = await fetch(`${esp32ServerUrl}/api/nutritrack/consumptions?since=${since}`, {
+      const res = await apiFetch(`${esp32ServerUrl}/api/nutritrack/consumptions?since=${since}`, {
+        method: "GET",
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
       if (!res.ok) { 
-        setEsp32Connected(false); 
         productsSyncedRef.current = false; 
-        console.error("Servidor respondió, pero con error:", res.status);
         return; 
       }
 
       // On first successful connect (or after reconnect), push local products
-      // so the server knows about "Pechuga de Pollo" and other named products
       if (!productsSyncedRef.current) {
         syncProductsToServer();
       }
-      setEsp32Connected(true);
       const data = await res.json();
       const serverList: ServerConsumption[] = data.consumptions ?? [];
       if (serverList.length === 0) return;
@@ -329,7 +405,7 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
         id: "esp32-" + sc.id,
         profileId,
         product: serverConsumptionToProduct(sc),
-        weightConsumedG: sc.weightConsumedG,
+        weightConsumedG: round1(sc.weightConsumedG),
         calories: sc.calories,
         protein: sc.protein,
         carbs: sc.carbs,
@@ -343,12 +419,23 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
         const fresh = toAdd.filter((c) => !existingIds.has(c.id));
         if (fresh.length === 0) return prev;
         const next = [...fresh, ...prev];
-        AsyncStorage.setItem(KEYS.consumptions, JSON.stringify(next));
+        AsyncStorage.setItem(K("consumptions"), JSON.stringify(next));
+        const first = fresh[0];
+        const serverFirst = serverList.find((sc) => sc.id === first.id.replace("esp32-", ""));
+        setScaleToast({
+          productName: first.product.name,
+          weightConsumedG: first.weightConsumedG,
+          calories: first.calories,
+          protein: first.protein,
+          carbs: first.carbs,
+          fat: first.fat,
+          weightBefore: serverFirst?.weightBefore,
+          weightAfter: serverFirst?.weightAfter,
+        });
         return next;
       });
 
       // Update matching inventory items (by product name)
-      // Also auto-add items for products not yet in local inventory
       setInventory((prev) => {
         let changed = false;
         const updated = prev.map((item) => {
@@ -359,22 +446,21 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
           changed = true;
           return {
             ...item,
-            currentWeightG: Math.max(0, match.weightAfter),
-            initialWeightG: Math.max(item.initialWeightG, match.weightBefore),
+            currentWeightG: round1(Math.max(0, match.weightAfter)),
+            initialWeightG: round1(Math.max(item.initialWeightG, match.weightBefore)),
             lastUpdated: match.timestamp,
             source: "esp32" as const,
           };
         });
 
-        // Auto-add new inventory items for products not yet tracked locally
         const existingNames = new Set(prev.map((i) => i.product.name.toLowerCase()));
         const newItems: InventoryItem[] = serverList
           .filter((sc) => !existingNames.has(sc.productName.toLowerCase()) && sc.weightAfter >= 0)
           .map((sc) => ({
             id: "esp32-inv-" + uid(),
             product: serverConsumptionToProduct(sc),
-            currentWeightG: Math.max(0, sc.weightAfter),
-            initialWeightG: Math.max(0, sc.weightBefore),
+            currentWeightG: round1(Math.max(0, sc.weightAfter)),
+            initialWeightG: round1(Math.max(0, sc.weightBefore)),
             lastUpdated: sc.timestamp,
             source: "esp32" as const,
           }));
@@ -382,14 +468,12 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
         if (newItems.length > 0) changed = true;
         const next = [...updated, ...newItems];
         if (!changed) return prev;
-        AsyncStorage.setItem(KEYS.inventory, JSON.stringify(next));
+        AsyncStorage.setItem(K("inventory"), JSON.stringify(next));
         return next;
       });
 
-      // Advance the sync window so we don't re-process the same records
       lastSyncRef.current = new Date().toISOString();
     } catch (error) {
-      setEsp32Connected(false);
       productsSyncedRef.current = false;
       clearTimeout(timeoutId);
       console.error("Fallo catastrófico del fetch:", error);
@@ -397,11 +481,17 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
   }, [esp32ServerUrl])
 
   useEffect(() => {
-    // Initial check after 2s (let data load first), then every 5s
+    // Check ESP32 status frequently (cada 3s)
+    const statusInterval = setInterval(() => checkEsp32Status(), 3000);
+    // Sync consumos cada 5s
     const init = setTimeout(() => syncEsp32(), 2000);
-    const interval = setInterval(syncEsp32, 5000);
-    return () => { clearTimeout(init); clearInterval(interval); };
-  }, [syncEsp32]);
+    const syncInterval = setInterval(syncEsp32, 5000);
+    return () => {
+      clearTimeout(init);
+      clearInterval(syncInterval);
+      clearInterval(statusInterval);
+    };
+  }, [syncEsp32, checkEsp32Status]);
 
   // ─── Derived state ─────────────────────────────────────────────────────────
   const currentProfile = profiles.find((p) => p.id === currentProfileId) ?? null;
@@ -425,14 +515,14 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
   // ─── Actions ───────────────────────────────────────────────────────────────
   const switchProfile = useCallback(async (id: string) => {
     setCurrentProfileId(id);
-    await AsyncStorage.setItem(KEYS.currentProfileId, id);
+    await AsyncStorage.setItem(K("currentProfileId"), id);
   }, []);
 
   const addProfile = useCallback(async (p: Omit<Profile, "id">) => {
     const newProfile = { ...p, id: uid() };
     setProfiles((prev) => {
       const next = [...prev, newProfile];
-      AsyncStorage.setItem(KEYS.profiles, JSON.stringify(next));
+      AsyncStorage.setItem(K("profiles"), JSON.stringify(next));
       return next;
     });
   }, []);
@@ -440,7 +530,7 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
   const updateProfile = useCallback(async (p: Profile) => {
     setProfiles((prev) => {
       const next = prev.map((x) => (x.id === p.id ? p : x));
-      AsyncStorage.setItem(KEYS.profiles, JSON.stringify(next));
+      AsyncStorage.setItem(K("profiles"), JSON.stringify(next));
       return next;
     });
   }, []);
@@ -449,7 +539,7 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
     const newProduct = { ...p, id: uid() };
     setProducts((prev) => {
       const next = [...prev, newProduct];
-      AsyncStorage.setItem(KEYS.products, JSON.stringify(next));
+      AsyncStorage.setItem(K("products"), JSON.stringify(next));
       return next;
     });
     return newProduct;
@@ -459,14 +549,14 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
     const item: InventoryItem = {
       id: uid(),
       product,
-      currentWeightG: weightG,
-      initialWeightG: weightG,
+      currentWeightG: round1(weightG),
+      initialWeightG: round1(weightG),
       lastUpdated: new Date().toISOString(),
       source: "manual",
     };
     setInventory((prev) => {
       const next = [...prev, item];
-      AsyncStorage.setItem(KEYS.inventory, JSON.stringify(next));
+      AsyncStorage.setItem(K("inventory"), JSON.stringify(next));
       return next;
     });
     return item;
@@ -475,7 +565,7 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
   const removeFromInventory = useCallback(async (itemId: string) => {
     setInventory((prev) => {
       const next = prev.filter((i) => i.id !== itemId);
-      AsyncStorage.setItem(KEYS.inventory, JSON.stringify(next));
+      AsyncStorage.setItem(K("inventory"), JSON.stringify(next));
       return next;
     });
   }, []);
@@ -485,10 +575,10 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
       setInventory((prev) => {
         const next = prev.map((i) =>
           i.id === itemId
-            ? { ...i, currentWeightG: Math.max(0, newWeightG), lastUpdated: new Date().toISOString(), source }
+            ? { ...i, currentWeightG: round1(Math.max(0, newWeightG)), lastUpdated: new Date().toISOString(), source }
             : i
         );
-        AsyncStorage.setItem(KEYS.inventory, JSON.stringify(next));
+        AsyncStorage.setItem(K("inventory"), JSON.stringify(next));
         return next;
       });
     },
@@ -501,7 +591,7 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
       setInventory((prevInv) => {
         const item = prevInv.find((i) => i.id === itemId);
         if (!item) return prevInv;
-        const delta = item.currentWeightG - newWeightG;
+        const delta = round1(item.currentWeightG - newWeightG);
         if (delta <= 0) return prevInv;
         const macros = calcMacros(item.product, delta);
         const consumption: Consumption = {
@@ -515,16 +605,16 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
         };
         setConsumptions((prevCons) => {
           const next = [consumption, ...prevCons];
-          AsyncStorage.setItem(KEYS.consumptions, JSON.stringify(next));
+          AsyncStorage.setItem(K("consumptions"), JSON.stringify(next));
           return next;
         });
         const updatedItem: InventoryItem = {
           ...item,
-          currentWeightG: newWeightG,
+          currentWeightG: round1(newWeightG),
           lastUpdated: new Date().toISOString(),
         };
         const nextInv = prevInv.map((i) => (i.id === itemId ? updatedItem : i));
-        AsyncStorage.setItem(KEYS.inventory, JSON.stringify(nextInv));
+        AsyncStorage.setItem(K("inventory"), JSON.stringify(nextInv));
         return nextInv;
       });
     },
@@ -539,14 +629,14 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
         id: uid(),
         profileId: currentProfileId,
         product,
-        weightConsumedG: weightG,
+        weightConsumedG: round1(weightG),
         ...macros,
         timestamp: new Date().toISOString(),
         source: "manual",
       };
       setConsumptions((prev) => {
         const next = [consumption, ...prev];
-        AsyncStorage.setItem(KEYS.consumptions, JSON.stringify(next));
+        AsyncStorage.setItem(K("consumptions"), JSON.stringify(next));
         return next;
       });
     },
@@ -556,7 +646,7 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
   const deleteConsumption = useCallback(async (id: string) => {
     setConsumptions((prev) => {
       const next = prev.filter((c) => c.id !== id);
-      AsyncStorage.setItem(KEYS.consumptions, JSON.stringify(next));
+      AsyncStorage.setItem(K("consumptions"), JSON.stringify(next));
       return next;
     });
   }, []);
@@ -569,9 +659,8 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
       const body = item
         ? { barcode: item.product.barcode, productName: item.product.name }
         : { clear: true };
-      await fetch(`${esp32ServerUrl}/api/nutritrack/active`, {
+      await apiFetch(`${esp32ServerUrl}/api/nutritrack/active`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
         signal: controller.signal,
       });
@@ -580,6 +669,59 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(timeoutId);
     }
   }, [esp32ServerUrl]);
+
+  const sendWeighCommand = useCallback(async (action: "weigh" | "tare" | "stop") => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    try {
+      await apiFetch(`${esp32ServerUrl}/api/nutritrack/weigh`, {
+        method: "POST",
+        body: JSON.stringify({ action }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+    } catch (_e) {
+      clearTimeout(timeoutId);
+    }
+  }, [esp32ServerUrl]);
+
+  const searchFatSecretFoods = useCallback(async (query: string, maxResults = 20): Promise<FatSecretSearchResult> => {
+    const res = await apiFetch(
+      `${esp32ServerUrl}/api/fatsecret/search?q=${encodeURIComponent(query)}&max=${maxResults}`,
+    );
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`FatSecret search error: ${err}`);
+    }
+    return res.json();
+  }, [esp32ServerUrl]);
+
+  const importFromFatSecret = useCallback(async (
+    foodId: string,
+    foodName: string,
+    brand?: string,
+    caloriesPer100g = 0,
+    proteinPer100g = 0,
+    carbsPer100g = 0,
+    fatPer100g = 0,
+  ): Promise<Product> => {
+    const newProduct: Product = {
+      id: `fs-${foodId}`,
+      barcode: undefined,
+      name: foodName,
+      brand,
+      caloriesPer100g,
+      proteinPer100g,
+      carbsPer100g,
+      fatPer100g,
+    };
+    setProducts((prev) => {
+      const updated = [newProduct, ...prev];
+      AsyncStorage.setItem(K("products"), JSON.stringify(updated));
+      return updated;
+    });
+    return newProduct;
+  }, []);
 
   return (
     <NutriContext.Provider
@@ -606,6 +748,11 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
         addConsumptionManual,
         deleteConsumption,
         syncEsp32,
+        sendWeighCommand,
+        searchFatSecretFoods,
+        importFromFatSecret,
+        scaleToast,
+        clearScaleToast,
       }}
     >
       {children}

@@ -20,7 +20,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import ALIMENTOS, { type AlimentoINTA, buscarAlimento } from "@/data/alimentos_inta";
-import { useNutri, type Product } from "@/context/NutriContext";
+import { ALL_CHILEAN_FOODS } from "@/data/foods_chile";
+import { useNutri, type Product, type FatSecretSearchResult } from "@/context/NutriContext";
 import { useColors } from "@/hooks/useColors";
 
 type Tab = "despensa" | "buscar";
@@ -98,14 +99,20 @@ export default function InventoryScreen() {
     syncEsp32,
     activeProductOnScale,
     setActiveProductOnScale,
+    searchFatSecretFoods,
+    sendWeighCommand,
   } = useNutri();
 
   const [tab, setTab] = useState<Tab>("despensa");
 
-  // INTA search
+  // Local search combined (products + INTA)
   const [dbSearch, setDbSearch] = useState("");
   const inSearchMode = dbSearch.trim().length > 0;
   const inResults: AlimentoINTA[] = inSearchMode ? buscarAlimento(dbSearch) : [];
+  const localResults: Product[] = inSearchMode
+    ? products.filter(p => p.name.toLowerCase().includes(dbSearch.toLowerCase()))
+    : [];
+  const hasLocalResults = localResults.length > 0 || inResults.length > 0;
 
   // Scanned/selected product modal (barcode lookup OR INTA selection)
   const [scanModal, setScanModal] = useState(false);
@@ -155,6 +162,43 @@ export default function InventoryScreen() {
   }, [activeProductOnScale, pulseAnim]);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
+
+  // FatSecret search
+  const [fsResults, setFsResults] = useState<FatSecretSearchResult["foods"]>([]);
+  const [fsLoading, setFsLoading] = useState(false);
+
+  function handleSearchChange(text: string) {
+    setDbSearch(text);
+    setFsResults([]);
+  }
+
+  async function searchFS() {
+    const q = dbSearch.trim();
+    if (!q || fsLoading) return;
+    setFsLoading(true);
+    try {
+      const res = await searchFatSecretFoods(q, 15);
+      setFsResults(res.foods);
+    } catch {
+      setFsResults([]);
+    } finally {
+      setFsLoading(false);
+    }
+  }
+
+  function openFSFood(f: FatSecretSearchResult["foods"][0]) {
+    setScannedProduct({
+      name: f.name,
+      brand: f.brand,
+      caloriesPer100g: f.caloriesPer100g,
+      proteinPer100g: f.proteinPer100g,
+      carbsPer100g: f.carbsPer100g,
+      fatPer100g: f.fatPer100g,
+    });
+    setScanStep("result");
+    setScanModal(true);
+    Haptics.selectionAsync();
+  }
 
   function resetScan() {
     setBarcodeInput(""); setScannedProduct(null); setScanError("");
@@ -259,7 +303,7 @@ export default function InventoryScreen() {
       // Log the consumption
       addConsumptionManual(actionItem.product, w);
       // Reduce the stock
-      const newW = Math.max(0, actionItem.currentWeightG - w);
+      const newW = Math.round((Math.max(0, actionItem.currentWeightG - w)) * 10) / 10;
       updateInventoryWeight(actionItem.id, newW, "manual");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert("✓ Registrado", `Consumiste ${w}g de ${actionItem.product.name}. Quedan ${newW}g.`);
@@ -355,6 +399,70 @@ export default function InventoryScreen() {
     </Pressable>
   );
 
+  const LocalProductCard = ({ item }: { item: Product }) => {
+    const isUserAdded = !ALL_CHILEAN_FOODS.find(f => f.id === item.id);
+    return (
+      <Pressable style={[styles.intaCard, { backgroundColor: colors.card }]} onPress={() => {
+        setScannedProduct({
+          name: item.name,
+          brand: item.brand,
+          barcode: item.barcode,
+          caloriesPer100g: item.caloriesPer100g,
+          proteinPer100g: item.proteinPer100g,
+          carbsPer100g: item.carbsPer100g,
+          fatPer100g: item.fatPer100g,
+        });
+        setScanStep("result");
+        setScanModal(true);
+        Haptics.selectionAsync();
+      }}>
+        <View style={{ flex: 1, gap: 3 }}>
+          <View style={[styles.catBadge, { backgroundColor: isUserAdded ? "#FFF3E0" : colors.secondary }]}>
+            <Feather name={isUserAdded ? "user" : "globe"} size={10} color={isUserAdded ? "#E65100" : colors.primary} />
+            <Text style={[styles.catBadgeText, { color: isUserAdded ? "#E65100" : colors.primary }]}>
+              {isUserAdded ? "Personalizado" : "Chile"}
+            </Text>
+          </View>
+          <Text style={[styles.intaName, { color: colors.foreground }]}>{item.name}</Text>
+          {item.brand && <Text style={[styles.cardBrand, { color: colors.mutedForeground }]}>{item.brand}</Text>}
+          <Text style={[styles.small, { color: colors.mutedForeground }]}>
+            P:{item.proteinPer100g}g · C:{item.carbsPer100g}g · G:{item.fatPer100g}g
+          </Text>
+        </View>
+        <View style={{ alignItems: "flex-end", gap: 4 }}>
+          <Text style={[styles.intaCal, { color: colors.primary }]}>{item.caloriesPer100g} kcal</Text>
+          <View style={[styles.addChip, { backgroundColor: colors.secondary }]}>
+            <Feather name="plus" size={14} color={colors.primary} />
+            <Text style={[styles.addChipText, { color: colors.primary }]}>Agregar</Text>
+          </View>
+        </View>
+      </Pressable>
+    );
+  };
+
+  const FSCard = ({ item }: { item: FatSecretSearchResult["foods"][0] }) => (
+    <Pressable style={[styles.intaCard, { backgroundColor: colors.card }]} onPress={() => openFSFood(item)}>
+      <View style={{ flex: 1, gap: 3 }}>
+        <View style={[styles.catBadge, { backgroundColor: "#E8F5E9" }]}>
+          <Feather name="database" size={10} color="#2E7D32" />
+          <Text style={[styles.catBadgeText, { color: "#2E7D32" }]}>FatSecret</Text>
+        </View>
+        <Text style={[styles.intaName, { color: colors.foreground }]}>{item.name}</Text>
+        {item.brand && <Text style={[styles.cardBrand, { color: colors.mutedForeground }]}>{item.brand}</Text>}
+        <Text style={[styles.small, { color: colors.mutedForeground }]}>
+          P:{item.proteinPer100g}g · C:{item.carbsPer100g}g · G:{item.fatPer100g}g
+        </Text>
+      </View>
+      <View style={{ alignItems: "flex-end", gap: 4 }}>
+        <Text style={[styles.intaCal, { color: "#2E7D32" }]}>{item.caloriesPer100g} kcal</Text>
+        <View style={[styles.addChip, { backgroundColor: "#E8F5E9" }]}>
+          <Feather name="plus" size={14} color="#2E7D32" />
+          <Text style={[styles.addChipText, { color: "#2E7D32" }]}>Agregar</Text>
+        </View>
+      </View>
+    </Pressable>
+  );
+
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
 
@@ -441,7 +549,7 @@ export default function InventoryScreen() {
           }
           renderItem={({ item }) => {
             const pct = item.initialWeightG > 0 ? item.currentWeightG / item.initialWeightG : 0;
-            const consumed = item.initialWeightG - item.currentWeightG;
+            const consumed = Math.round((item.initialWeightG - item.currentWeightG) * 10) / 10;
             const isEsp32 = item.source === "esp32";
             const stockColor =
               pct < 0.15 ? colors.destructive : pct < 0.4 ? colors.carbs : colors.primary;
@@ -473,18 +581,18 @@ export default function InventoryScreen() {
                 {/* Weight row */}
                 <View style={styles.weightRow}>
                   <View style={styles.weightBlock}>
-                    <Text style={[styles.weightBig, { color: stockColor }]}>{item.currentWeightG}g</Text>
+                    <Text style={[styles.weightBig, { color: stockColor }]}>{item.currentWeightG.toFixed(1)}g</Text>
                     <Text style={[styles.weightLabel, { color: colors.mutedForeground }]}>restante</Text>
                   </View>
                   <View style={styles.weightSep} />
                   <View style={styles.weightBlock}>
-                    <Text style={[styles.weightMid, { color: colors.foreground }]}>{item.initialWeightG}g</Text>
+                    <Text style={[styles.weightMid, { color: colors.foreground }]}>{item.initialWeightG.toFixed(1)}g</Text>
                     <Text style={[styles.weightLabel, { color: colors.mutedForeground }]}>inicial</Text>
                   </View>
                   <View style={styles.weightSep} />
                   <View style={styles.weightBlock}>
                     <Text style={[styles.weightMid, { color: consumed > 0 ? colors.destructive : colors.mutedForeground }]}>
-                      -{consumed}g
+                      -{consumed.toFixed(1)}g
                     </Text>
                     <Text style={[styles.weightLabel, { color: colors.mutedForeground }]}>consumido</Text>
                   </View>
@@ -593,21 +701,23 @@ export default function InventoryScreen() {
               <TextInput
                 style={[styles.searchText, { color: colors.foreground }]}
                 value={dbSearch}
-                onChangeText={setDbSearch}
+                onChangeText={handleSearchChange}
                 placeholder="Ej: pollo, arroz, manzana, leche..."
                 placeholderTextColor={colors.mutedForeground}
                 returnKeyType="search"
                 autoCorrect={false}
               />
               {dbSearch.length > 0 && (
-                <Pressable onPress={() => setDbSearch("")}>
+                <Pressable onPress={() => handleSearchChange("")}>
                   <Feather name="x" size={16} color={colors.mutedForeground} />
                 </Pressable>
               )}
             </View>
             <View style={[styles.infoChip, { backgroundColor: colors.secondary }]}>
-              <Feather name="book-open" size={11} color={colors.primary} />
-              <Text style={[styles.infoChipText, { color: colors.primary }]}>INTA · {ALIMENTOS.length} alimentos</Text>
+              <Feather name="package" size={11} color={colors.primary} />
+              <Text style={[styles.infoChipText, { color: colors.primary }]}>
+                {products.length + ALIMENTOS.length} alimentos locales
+              </Text>
             </View>
           </View>
 
@@ -624,7 +734,7 @@ export default function InventoryScreen() {
                   <Pressable
                     key={cat}
                     style={[styles.catChip, { backgroundColor: colors.secondary }]}
-                    onPress={() => setDbSearch(cat)}
+                    onPress={() => handleSearchChange(cat)}
                   >
                     <Text style={[styles.catChipText, { color: colors.primary }]}>{cat}</Text>
                   </Pressable>
@@ -671,34 +781,81 @@ export default function InventoryScreen() {
                 </Text>
               </Pressable>
             </ScrollView>
-          ) : inResults.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Feather name="frown" size={36} color={colors.mutedForeground} />
-              <Text style={[styles.emptyTitle, { color: colors.mutedForeground }]}>Sin resultados</Text>
-              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-                No se encontró "{dbSearch}" en la tabla INTA.
-              </Text>
-              <Pressable
-                style={[styles.emptyBtn, { backgroundColor: colors.primary }]}
-                onPress={() => setAddProductModal(true)}
-              >
-                <Text style={styles.emptyBtnText}>Agregar manualmente</Text>
-              </Pressable>
-            </View>
+          ) : !hasLocalResults ? (
+            <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 100 }]}>
+              <View style={styles.emptyState}>
+                <Feather name="frown" size={36} color={colors.mutedForeground} />
+                <Text style={[styles.emptyTitle, { color: colors.mutedForeground }]}>Sin resultados locales</Text>
+                <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
+                  No se encontró "{dbSearch}" en tus alimentos.
+                </Text>
+              </View>
+              <View style={{ paddingHorizontal: 16, gap: 8 }}>
+                <Pressable
+                  style={[styles.fsSearchBtn, { backgroundColor: "#2E7D32" }]}
+                  onPress={searchFS}
+                >
+                  <Feather name="database" size={16} color="#fff" />
+                  <Text style={styles.fsSearchBtnText}>
+                    {fsLoading ? "Buscando..." : "Buscar en FatSecret+"}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.addCustomBtn, { borderColor: colors.border }]}
+                  onPress={() => setAddProductModal(true)}
+                >
+                  <Feather name="plus-circle" size={16} color={colors.primary} />
+                  <Text style={[styles.addCustomText, { color: colors.primary }]}>Agregar manualmente</Text>
+                </Pressable>
+              </View>
+              {fsResults.length > 0 && (
+                <View style={{ paddingHorizontal: 16, marginTop: 8 }}>
+                  <Text style={[styles.sectionTitle, { color: "#2E7D32", marginBottom: 8 }]}>
+                    FatSecret · {fsResults.length} resultados
+                  </Text>
+                  {fsResults.map((f) => <FSCard key={f.id} item={f} />)}
+                </View>
+              )}
+            </ScrollView>
           ) : (
             <FlatList
-              data={inResults}
-              keyExtractor={(a) => a.id}
+              data={inSearchMode ? [...inResults.map(a => ({ ...a, _source: "inta" as const })), ...localResults.map(p => ({ ...p, _source: "product" as const }))] : []}
+              keyExtractor={(item) => item._source === "inta" ? `inta-${item.id}` : (item as Product).id}
               contentContainerStyle={[
                 styles.listContent,
                 { paddingBottom: insets.bottom + (Platform.OS === "web" ? 34 : 0) + 100 },
               ]}
               ListHeaderComponent={
-                <Text style={[styles.small, { color: colors.mutedForeground, marginBottom: 4 }]}>
-                  {inResults.length} resultado{inResults.length !== 1 ? "s" : ""} para "{dbSearch}"
-                </Text>
+                <View>
+                  <Text style={[styles.small, { color: colors.mutedForeground, marginBottom: 8 }]}>
+                    {localResults.length + inResults.length} resultado{localResults.length + inResults.length !== 1 ? "s" : ""} para "{dbSearch}"
+                  </Text>
+                  <Pressable
+                    style={[styles.fsSearchBtn, { backgroundColor: "#2E7D32", marginBottom: 8 }]}
+                    onPress={searchFS}
+                  >
+                    <Feather name="database" size={14} color="#fff" />
+                    <Text style={styles.fsSearchBtnText}>
+                      {fsLoading ? "Buscando..." : `Buscar también en FatSecret+ (${fsResults.length})`}
+                    </Text>
+                  </Pressable>
+                </View>
               }
-              renderItem={({ item }) => <INTACard item={item} />}
+              ListFooterComponent={
+                fsResults.length > 0 ? (
+                  <View style={{ marginTop: 8 }}>
+                    <Text style={[styles.sectionTitle, { color: "#2E7D32" }]}>
+                      FatSecret · {fsResults.length} resultados
+                    </Text>
+                    {fsResults.map((f) => <FSCard key={f.id} item={f} />)}
+                  </View>
+                ) : null
+              }
+              renderItem={({ item }) => item._source === "inta" ? (
+                <INTACard item={item as AlimentoINTA & { _source: string }} />
+              ) : (
+                <LocalProductCard item={item as Product & { _source: string }} />
+              )}
             />
           )}
         </View>
@@ -823,16 +980,18 @@ export default function InventoryScreen() {
                   {/* Opción 2: Pesar en balanza (ESP32 real-time) */}
                   <Pressable
                     style={[styles.bigActionBtn, { backgroundColor: "#E8F8F0", borderWidth: 2, borderColor: colors.primary }]}
-                    onPress={() => {
+                    onPress={async () => {
                       const product = scannedToLocalProduct();
-                      // Check if already in inventory, otherwise add with weight=0
                       const existing = inventory.find(
                         (i) => i.product.id === product.id ||
                                 (product.barcode && i.product.barcode === product.barcode) ||
                                 i.product.name.toLowerCase() === product.name.toLowerCase()
                       );
                       const invItem = existing ?? addToInventory(product, 0);
-                      setActiveProductOnScale(invItem);
+                      try {
+                        await setActiveProductOnScale(invItem);
+                        await sendWeighCommand("weigh");
+                      } catch {}
                       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                       setScanModal(false); resetScan(); setTab("despensa");
                     }}
@@ -979,7 +1138,7 @@ export default function InventoryScreen() {
             {actionItem && (
               <View style={[styles.selectedBadge, { backgroundColor: colors.secondary }]}>
                 <Text style={[styles.selectedName, { color: colors.primary }]}>{actionItem.product.name}</Text>
-                <Text style={[styles.small, { color: colors.mutedForeground }]}>Stock actual: {actionItem.currentWeightG}g</Text>
+                <Text style={[styles.small, { color: colors.mutedForeground }]}>Stock actual: {actionItem.currentWeightG.toFixed(1)}g</Text>
               </View>
             )}
             {actionModal === "consume" && actionItem && actionWeight !== "" && previewMacros(actionItem.product as ScannedProduct, actionWeight) && (() => {
@@ -1233,4 +1392,8 @@ const styles = StyleSheet.create({
   selectedName: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
   backLink: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center" },
   twoCol: { flexDirection: "row", gap: 12 },
+
+  // FatSecret
+  fsSearchBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12 },
+  fsSearchBtnText: { color: "#fff", fontFamily: "Inter_600SemiBold", fontSize: 14 },
 });

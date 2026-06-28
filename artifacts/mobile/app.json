@@ -29,7 +29,7 @@
       [
         "expo-router",
         {
-          "origin": "https://replit.com/"
+          "origin": "https://nutritrack.vercel.app"
         }
       ],
       "expo-font",

@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: nutritrack-api
+    runtime: node
+    repo: https://github.com/tominunez/nutritrack
+    plan: free
+    buildCommand: cd artifacts/api-server && pnpm run build
+    startCommand: cd artifacts/api-server && node --enable-source-maps ./dist/index.mjs
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: DATABASE_URL
+        sync: false
+      - key: FATSECRET_CLIENT_ID
+        sync: false
+      - key: FATSECRET_CLIENT_SECRET
+        sync: false

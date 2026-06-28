@@ -1,0 +1,12 @@
+// ─────────────────────────────────────────
+//  ⚙️  CONFIGURACIÓN — Copiá este archivo como config.h
+//     y completá tus datos. config.h está en .gitignore.
+// ─────────────────────────────────────────
+#ifndef CONFIG_H
+#define CONFIG_H
+
+#define WIFI_SSID        "tu-red-wifi"
+#define WIFI_PASSWORD    "tu-contraseña"
+#define SERVER_BASE      "http://192.168.1.X:3000/api/nutritrack"
+
+#endif
