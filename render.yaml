@@ -4,7 +4,7 @@ services:
     runtime: node
     repo: https://github.com/tominunez/nutritrack
     plan: free
-    buildCommand: cd artifacts/api-server && pnpm run build
+    buildCommand: pnpm run build
     startCommand: cd artifacts/api-server && node --enable-source-maps ./dist/index.mjs
     envVars:
       - key: PORT
