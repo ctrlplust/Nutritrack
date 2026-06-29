@@ -22,9 +22,11 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const API_URL = process.env.EXPO_PUBLIC_DOMAIN
-  ? `http://${process.env.EXPO_PUBLIC_DOMAIN}`
-  : "http://192.168.1.94:3000"; // fallback por si falta .env
+const IS_HTTPS = typeof window !== "undefined" && window.location?.protocol === "https:";
+const API_URL = process.env.EXPO_PUBLIC_API_URL
+  || (process.env.EXPO_PUBLIC_DOMAIN
+    ? `${IS_HTTPS ? "https" : "http"}://${process.env.EXPO_PUBLIC_DOMAIN}`
+    : "http://192.168.1.94:3000");
 
 const KEYS = {
   token: "nutritrack_auth_token",
