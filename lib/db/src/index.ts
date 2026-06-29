@@ -9,7 +9,7 @@ if (!process.env.DATABASE_URL) {
 const client = postgres(process.env.DATABASE_URL, {
   prepare: false,
   ssl: { rejectUnauthorized: false },
-  max: 1,
+  max: 3,
 });
 
 export const db = drizzle(client, { schema });
