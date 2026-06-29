@@ -6,8 +6,7 @@ if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL must be set");
 }
 
-const connectionString = process.env.DATABASE_URL!.replace(/\?.*$/, "");
-const client = postgres(connectionString, {
+const client = postgres(process.env.DATABASE_URL, {
   prepare: false,
   ssl: { rejectUnauthorized: false },
 });
