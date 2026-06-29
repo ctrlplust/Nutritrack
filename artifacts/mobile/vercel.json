@@ -3,6 +3,9 @@
   "outputDirectory": "dist",
   "installCommand": "pnpm install --frozen-lockfile",
   "framework": null,
+  "env": {
+    "EXPO_PUBLIC_API_URL": "https://nutritrack-api-pjmh.onrender.com"
+  },
   "rewrites": [
     { "source": "/(.*)", "destination": "/" }
   ]
