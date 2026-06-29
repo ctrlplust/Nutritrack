@@ -10,6 +10,9 @@ const client = postgres(process.env.DATABASE_URL, {
   prepare: false,
   ssl: { rejectUnauthorized: false },
   max: 3,
+  idle_timeout: 20,
+  connect_timeout: 10,
+  max_lifetime: 1800,
 });
 
 export const db = drizzle(client, { schema });
