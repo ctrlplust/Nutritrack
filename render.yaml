@@ -2,7 +2,7 @@ services:
   - type: web
     name: nutritrack-api
     runtime: node
-    repo: https://github.com/tominunez/nutritrack
+    repo: https://github.com/ctrlplust/Nutritrack
     plan: free
     buildCommand: pnpm run build
     startCommand: cd artifacts/api-server && node --enable-source-maps ./dist/index.mjs
