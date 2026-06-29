@@ -29,7 +29,14 @@ app.use(
     },
   }),
 );
-app.use(cors());
+app.use(cors({
+  origin: [
+    "https://nutritrack-web-fawn.vercel.app",
+    "https://nutritrack-mqlfxfk4i-nutritrack1.vercel.app",
+    "http://localhost:8081",
+    "http://192.168.1.94:8081",
+  ],
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());

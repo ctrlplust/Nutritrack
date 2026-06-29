@@ -29,7 +29,7 @@
       [
         "expo-router",
         {
-          "origin": "https://nutritrack.vercel.app"
+          "origin": "https://nutritrack-web-fawn.vercel.app"
         }
       ],
       "expo-font",
