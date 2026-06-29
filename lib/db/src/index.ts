@@ -8,9 +8,11 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-const client = postgres(process.env.DATABASE_URL, {
+// Strip libpq query params (sslmode, pgbouncer) — postgres.js uses options instead
+const connectionString = process.env.DATABASE_URL!.replace(/\?.*$/, "");
+const client = postgres(connectionString, {
   prepare: false,
-  ssl: "require",
+  ssl: { rejectUnauthorized: false },
 });
 
 export const db = drizzle(client, { schema });
