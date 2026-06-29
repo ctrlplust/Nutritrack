@@ -1,8 +1,6 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import app from "./app";
-import { logger } from "./lib/logger";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const envPath = resolve(__dirname, "../.env");
@@ -32,6 +30,9 @@ const port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
+
+const { default: app } = await import("./app");
+const { logger } = await import("./lib/logger");
 
 app.listen(port, "0.0.0.0", (err) => {
   if (err) {

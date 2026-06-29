@@ -7,9 +7,11 @@
     "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
     "build": "node ./build.mjs",
     "start": "PORT=${PORT:-3000} node --enable-source-maps ./dist/index.mjs",
+    "start:local": "PORT=${PORT:-3000} node --import tsx src/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.3",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
     "bcryptjs": "^3.0.3",

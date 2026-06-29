@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include "HX711.h"
@@ -143,7 +144,8 @@ void loop() {
 void checkActiveProduct() {
   if (WiFi.status() != WL_CONNECTED) return;
 
-  WiFiClient client; // Usamos cliente normal para la red local
+  WiFiClientSecure client;
+  client.setInsecure();
   HTTPClient http;
   http.begin(client, POLL_URL);
   http.setTimeout(4000);
@@ -188,9 +190,10 @@ void checkActiveProduct() {
 //  ENVIAR CONSUMO (HTTP)
 // ─────────────────────────────────────────
 void enviarConsumo(float consumidoG, float pesoFinalG, float pesoInicialG) {
-  Serial.println("\n→ Enviando datos a NutriTrack (Local)...");
+  Serial.println("\n→ Enviando datos a NutriTrack (Render) ...");
 
-  WiFiClient client;
+  WiFiClientSecure client;
+  client.setInsecure();
   HTTPClient http;
   http.begin(client, SERVER_URL);
   http.addHeader("Content-Type", "application/json");
