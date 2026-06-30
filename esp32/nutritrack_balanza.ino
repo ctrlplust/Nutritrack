@@ -8,7 +8,7 @@
 // ─── CONFIGURACIÓN ─────────────────────────
 #define WIFI_SSID        "Pochita"
 #define WIFI_PASSWORD    "4c3opij0km"
-#define SERVER_BASE      "https://bqltc-201-188-79-192.run.pinggy-free.link/api/nutritrack"
+#define SERVER_BASE      "https://bqxkh-201-188-79-192.run.pinggy-free.link/api/nutritrack"
 // ───────────────────────────────────────────
 
 #define SERVER_URL       SERVER_BASE "/reading"

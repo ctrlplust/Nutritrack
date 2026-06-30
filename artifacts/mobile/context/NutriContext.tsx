@@ -257,7 +257,7 @@ export function NutriProvider({ children }: { children: React.ReactNode }) {
   userIdRef.current = user?.id || "anon";
 
   // ⚠️ Cambiar esta URL cada 60 min cuando expire el túnel Pinggy
-  const esp32ServerUrl = "https://bqltc-201-188-79-192.run.pinggy-free.link";
+  const esp32ServerUrl = "https://bqxkh-201-188-79-192.run.pinggy-free.link";
 
   function K(base: string): string {
     return storageKey(userIdRef.current, base);

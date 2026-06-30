@@ -445,22 +445,10 @@ router.post("/nutritrack/active", async (req, res) => {
     return;
   }
 
-  let product: Product | undefined;
-  if (barcode) {
-    product = await findProductByBarcode(barcode);
-  } else if (productName) {
-    product = await findProductByName(productName);
-  }
-
-  if (!product) {
-    res.status(404).json({ error: "Producto no encontrado", barcode, productName });
-    return;
-  }
-
-  activeProduct = { barcode: product.barcode, name: product.name, setAt: new Date().toISOString() };
-  sseEmit("active_changed", { activeProduct, product });
-  req.log.info({ productName: product.name }, "Producto activo en balanza");
-  res.json({ message: `Producto activo: ${product.name}`, activeProduct, product });
+  activeProduct = { barcode: barcode ?? "", name: productName ?? "Producto", setAt: new Date().toISOString() };
+  sseEmit("active_changed", { activeProduct, product: null });
+  req.log.info({ productName: activeProduct.name }, "Producto activo en balanza");
+  res.json({ message: `Producto activo: ${activeProduct.name}`, activeProduct, product: null });
 });
 
 // ────────────────────────────────────────────────────────────────────────────
