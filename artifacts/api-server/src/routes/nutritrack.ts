@@ -909,6 +909,9 @@ router.get("/nutritrack/consumptions", async (req, res) => {
     }
 
     const rows = await query;
+    function safeTimestamp(ts: unknown): string {
+      try { return new Date(ts as string).toISOString(); } catch { return new Date().toISOString(); }
+    }
     const consumptions: Consumption[] = rows.map((r: typeof consumptionsTable.$inferSelect) => ({
       id: r.id,
       productId: r.productId,
@@ -921,11 +924,12 @@ router.get("/nutritrack/consumptions", async (req, res) => {
       weightBefore: r.weightBefore ?? 0,
       weightAfter: r.weightAfter ?? 0,
       deviceId: r.deviceId ?? undefined,
-      timestamp: r.timestamp?.toISOString() ?? new Date().toISOString(),
+      timestamp: safeTimestamp(r.timestamp),
     }));
 
     res.json({ consumptions, total: consumptions.length });
   } catch (err) {
+    req.log.error({ err }, "DB error en GET /consumptions");
     res.status(500).json({ error: "Database unavailable" });
   }
 });
