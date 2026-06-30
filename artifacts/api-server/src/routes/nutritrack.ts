@@ -440,6 +440,7 @@ router.post("/nutritrack/active", async (req, res) => {
   const clear = b.clear === true || (!barcode && !productName);
 
   if (clear) {
+    activeProduct = null;
     req.log.info("Producto activo removido");
     res.json({ message: "Producto activo removido", activeProduct: null });
     return;
