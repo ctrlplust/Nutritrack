@@ -6,8 +6,8 @@
 #include "HX711.h"
 
 // ─── CONFIGURACIÓN ─────────────────────────
-#define WIFI_SSID        "NutriTrack"
-#define WIFI_PASSWORD    "tomiwi12"
+#define WIFI_SSID        "Pochita"
+#define WIFI_PASSWORD    "4c3opij0km"
 #define SERVER_BASE      "https://bqltc-201-188-79-192.run.pinggy-free.link/api/nutritrack"
 // ───────────────────────────────────────────
 
