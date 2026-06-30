@@ -672,6 +672,7 @@ router.post("/nutritrack/reading", async (req, res) => {
           timestamp: new Date().toISOString(),
         };
 
+        activeProduct = null;
         sseEmit("consumption", { consumption, item: newItem, activeProduct });
         req.log.info({ productName, consumedG }, "Consumo de producto nuevo registrado (macros pendientes)");
         res.status(201).json({
@@ -681,6 +682,7 @@ router.post("/nutritrack/reading", async (req, res) => {
           item: newItem,
         });
       } else {
+        activeProduct = null;
         sseEmit("inventory_created", { item: newItem, activeProduct });
         res.status(201).json({
           action: "inventory_created",
@@ -693,8 +695,23 @@ router.post("/nutritrack/reading", async (req, res) => {
     }
 
     if (!product) {
-      res.status(404).json({ error: "Producto no encontrado y no hay producto activo.", barcode, productName });
-      return;
+      if (barcode && activeProduct?.barcode === barcode) {
+        const autoProduct: Product = {
+          id: uid(),
+          barcode,
+          name: activeProduct.name ?? "Producto escaneado",
+          caloriesPer100g: 0,
+          proteinPer100g: 0,
+          carbsPer100g: 0,
+          fatPer100g: 0,
+        };
+        await db.insert(productsTable).values(autoProduct);
+        product = autoProduct;
+        req.log.info({ barcode, name: product.name }, "Producto creado desde activeProduct");
+      } else {
+        res.status(404).json({ error: "Producto no encontrado y no hay producto activo.", barcode, productName });
+        return;
+      }
     }
 
     let item = await findInventoryItemByProductId(product.id);
@@ -756,6 +773,7 @@ router.post("/nutritrack/reading", async (req, res) => {
         timestamp: new Date().toISOString(),
       };
 
+      activeProduct = null;
       req.log.info({ productName: product.name, consumedG, calories: macros.calories }, "Consumo ESP32-FSM registrado");
       sseEmit("consumption", { consumption, item, activeProduct });
 
