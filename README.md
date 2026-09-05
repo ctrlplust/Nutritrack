@@ -277,5 +277,5 @@ Escanee el **código QR** resultante desde su dispositivo móvil con la app **Ex
 ---
 
 <p align="center">
-  <sub>Proyecto desarrollado para la asignatura Aduana de Cocina — 2026</sub>
+  <sub>Proyecto desarrollado para la Proyectos Tics 1 — 2026</sub>
 </p>
