@@ -35,6 +35,28 @@
 
 ---
 
+## 💼 Visión de Producto y Modelo de Negocio
+
+NutriTrack fue concebido y desarrollado bajo una validación de mercado real (metodología Canvas), con el objetivo de resolver un problema crítico en la salud y el deporte: el abandono de los regímenes nutricionales debido a la "fricción cognitiva" que genera el registro manual de alimentos. 
+
+Nuestra solución automatiza la captura de datos transformando una variable física (el diferencial de peso en el hardware) en métricas nutricionales exactas, eliminando el sesgo del auto-reporte.
+
+### 🎯 Segmentos de Mercado Objetivo
+El ecosistema está diseñado para escalar en dos verticales de negocio:
+
+* **B2C (Consumidor Final):** Orientado a atletas de competición y personas con regímenes dietéticos estrictos que sufren fatiga por el uso de aplicaciones manuales. El valor reside en la automatización del pesaje y la inmediatez del dato.
+* **B2B (Clínico y Corporativo):** Orientado a nutricionistas, centros de kinesiología y clínicas deportivas. Se ofrece a los profesionales de la salud acceso a datos empíricos y reales sobre la adherencia de sus pacientes, eliminando las imprecisiones de los reportes manuales.
+
+### 🚀 Proyección Comercial y Roadmap
+El Producto Mínimo Viable (PMV) actual valida la conectividad Cloud y la Lógica Delta. La hoja de ruta para la futura monetización y escalabilidad del proyecto incluye:
+
+* **Hardware as a Service (HaaS) / Modelo SaaS:** Venta del hardware inteligente (balanza NutriTrack) a costo accesible, complementado con una suscripción mensual para desbloquear métricas avanzadas, historial y reportes clínicos en la app.
+* **Evolución del Hardware Edge:** Migración del prototipo actual (basado en placas de desarrollo) hacia el diseño e impresión de una PCB personalizada, reduciendo drásticamente las dimensiones del producto para su uso doméstico y optimizando el consumo energético con baterías Li-Po.
+* **Alianzas Estratégicas:** Integración y cruce de datos con instituciones oficiales (como el INTA) y bases de datos nutricionales globales para ampliar el catálogo de escaneo por código de barras.
+
+---
+
+
 ## 🏗 Arquitectura
 
 ```
